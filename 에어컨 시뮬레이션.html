@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>에어컨 시뮬레이션 v2</title>
+    <style>
+        /* 기본 스타일 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+                Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f4f8;
+            color: #333;
+            padding: 20px;
+        }
+
+        /* 시뮬레이션 영역 */
+        .simulation-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background-color: #d6eaf8; /* 하늘 배경 */
+            border: 2px solid #aaa;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        /* SVG 캔버스 */
+        #simulation-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 집 */
+        .house {
+            fill: #fdebd0;
+            stroke: #d35400;
+            stroke-width: 4;
+        }
+        
+        /* 실내기 */
+        .indoor-unit {
+            fill: #f5f5f5;
+            stroke: #555;
+            stroke-width: 2;
+        }
+        .indoor-vent {
+            fill: #ddd;
+        }
+
+        /* 실외기 */
+        .outdoor-unit {
+            fill: #eaecee;
+            stroke: #7f8c8d;
+            stroke-width: 2;
+        }
+        /* 실외기 팬 */
+        .outdoor-fan-grille {
+            fill: #333;
+            stroke: #555;
+            stroke-width: 2;
+        }
+        .outdoor-fan-blade {
+            fill: #777;
+            stroke: #555;
+            stroke-width: 1;
+        }
+
+        /* 냉매 배관 (기본틀) */
+        .pipe {
+            fill: none;
+            stroke: #bdc3c7;
+            stroke-width: 8;
+        }
+
+        /* 냉매 흐름 애니메이션 (점선) */
+        .refrigerant-flow {
+            fill: none;
+            stroke-width: 4;
+            animation: flow 1s linear infinite;
+            animation-play-state: paused; /* 기본은 멈춤 */
+        }
+
+        /* 뜨거운 냉매 (실내 -> 실외기) */
+        .flow-hot {
+            stroke: #e74c3c; /* 빨간색 */
+            stroke-dasharray: 10, 10;
+        }
+
+        /* 차가운 냉매 (실외기 -> 실내) */
+        .flow-cool {
+            stroke: #3498db; /* 파란색 */
+            stroke-dasharray: 10, 10;
+        }
+
+        /* 애니메이션 키프레임 (점선이 흐르는 효과) */
+        @keyframes flow {
+            from {
+                stroke-dashoffset: 0;
+            }
+            to {
+                stroke-dashoffset: -20; /* 10+10 (dasharray 합계) */
+            }
+        }
+        
+        /* 온도 텍스트 */
+        .temp-text {
+            font-size: 24px;
+            font-weight: bold;
+            fill: #2c3e50;
+        }
+        .temp-label {
+            font-size: 16px;
+            fill: #555;
+        }
+
+        /* 제어판 */
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px 30px;
+            width: 800px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        .control-group .value-display {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        /* 전력량 표시 */
+        .power-display {
+            grid-column: 1 / -1; /* 두 컬럼 모두 차지 */
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .power-display .value {
+            color: #d9534f;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>에어컨 시뮬레이션 v2</h1>
+
+    <div class="simulation-container">
+        <svg id="simulation-svg" viewBox="0 0 800 400">
+            <rect x="0" y="0" width="450" height="400" fill="#fdf3e7" /> <rect x="450" y="0" width="350" height="400" fill="#e6f7ff" /> <rect class="house" x="440" y="50" width="20" height="300" />
+
+            <text x="225" y="40" class="temp-label" text-anchor="middle">실내 (Indoor)</text>
+            <text id="indoor-temp-display" x="225" y="80" class="temp-text" text-anchor="middle">24°C</text>
+            
+            <text x="625" y="40" class="temp-label" text-anchor="middle">실외 (Outdoor)</text>
+            <text id="outdoor-temp-display" x="625" y="80" class="temp-text" text-anchor="middle">35°C</text>
+
+            <rect class="indoor-unit" x="120" y="150" width="220" height="50" rx="5" />
+            <rect class="indoor-vent" x="130" y="190" width="200" height="8" rx="2" />
+
+            <rect class="outdoor-unit" x="550" y="150" width="160" height="200" rx="5" />
+            <circle class="outdoor-fan-grille" cx="630" cy="225" r="50" />
+            <circle class="outdoor-fan-blade" cx="630" cy="225" r="15" />
+            <path class="outdoor-fan-blade" d="M 630 225 m -10 -30 a 30 30 0 0 1 20 0 L 630 225 Z" />
+            <path class="outdoor-fan-blade" d="M 630 225 m 30 -10 a 30 30 0 0 1 0 20 L 630 225 Z" />
+            <path class="outdoor-fan-blade" d="M 630 225 m 10 30 a 30 30 0 0 1 -20 0 L 630 225 Z" />
+            <path class="outdoor-fan-blade" d="M 630 225 m -30 10 a 30 30 0 0 1 0 -20 L 630 225 Z" />
+
+
+            <path id="pipe-cool" class="pipe" 
+                  d="M 550 280 H 450 V 180 H 310 
+                     c -10 0, -10 -15, -20 -15 
+                     s -10 15, -20 15 
+                     s -10 -15, -20 -15 
+                     s -10 15, -20 15" />
+            <path id="flow-cool" class="refrigerant-flow flow-cool" 
+                  d="M 550 280 H 450 V 180 H 310 
+                     c -10 0, -10 -15, -20 -15 
+                     s -10 15, -20 15 
+                     s -10 -15, -20 -15 
+                     s -10 15, -20 15" />
+            
+            <path id="pipe-hot" class="pipe" 
+                  d="M 150 165 H 450 V 170 H 560 
+                     v 20 c 10 0, 10 15, 20 15 s 10 -15, 20 -15 s 10 15, 20 15 s 10 -15, 20 -15 
+                     v 15 c -10 0, -10 15, -20 15 s -10 -15, -20 -15 s -10 15, -20 15 s -10 -15, -20 -15
+                     v 15 c 10 0, 10 15, 20 15 s 10 -15, 20 -15 s 10 15, 20 15 s 10 -15, 20 -15" />
+            <path id="flow-hot" class="refrigerant-flow flow-hot" 
+                  d="M 150 165 H 450 V 170 H 560 
+                     v 20 c 10 0, 10 15, 20 15 s 10 -15, 20 -15 s 10 15, 20 15 s 10 -15, 20 -15 
+                     v 15 c -10 0, -10 15, -20 15 s -10 -15, -20 -15 s -10 15, -20 15 s -10 -15, -20 -15
+                     v 15 c 10 0, 10 15, 20 15 s 10 -15, 20 -15 s 10 15, 20 15 s 10 -15, 20 -15" />
+            
+        </svg>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="indoor-temp">
+                실내 목표 온도: <span id="indoor-temp-value" class="value-display">24</span>°C
+            </label>
+            <input type="range" id="indoor-temp" min="18" max="30" value="24" step="1">
+        </div>
+
+        <div class="control-group">
+            <label for="outdoor-temp">
+                현재 실외 온도: <span id="outdoor-temp-value" class="value-display">35</span>°C
+            </label>
+            <input type="range" id="outdoor-temp" min="20" max="45" value="35" step="1">
+        </div>
+
+        <div class="control-group">
+            <label for="efficiency">
+                에어컨 효율 (COP): <span id="efficiency-value" class="value-display">3.5</span>
+            </label>
+            <input type="range" id="efficiency" min="2.0" max="6.0" value="3.5" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <label for="house-insulation">
+                집 단열 성능 (낮을수록 좋음): <span id="house-insulation-value" class="value-display">150</span> W/°C
+            </label>
+            <input type="range" id="house-insulation" min="50" max="300" value="150" step="10">
+        </div>
+
+        <div class="power-display">
+            ⚡ 실시간 소비 전력: <span id="power-output" class="value">0</span> W
+        </div>
+    </div>
+
+    <script>
+        // DOM 요소 가져오기
+        const indoorTempSlider = document.getElementById('indoor-temp');
+        const outdoorTempSlider = document.getElementById('outdoor-temp');
+        const efficiencySlider = document.getElementById('efficiency');
+        const insulationSlider = document.getElementById('house-insulation');
+
+        const indoorTempValue = document.getElementById('indoor-temp-value');
+        const outdoorTempValue = document.getElementById('outdoor-temp-value');
+        const efficiencyValue = document.getElementById('efficiency-value');
+        const insulationValue = document.getElementById('house-insulation-value');
+
+        const indoorTempDisplay = document.getElementById('indoor-temp-display');
+        const outdoorTempDisplay = document.getElementById('outdoor-temp-display');
+        
+        const powerOutput = document.getElementById('power-output');
+        
+        const flowHot = document.getElementById('flow-hot');
+        const flowCool = document.getElementById('flow-cool');
+
+        // 시뮬레이션 업데이트 함수
+        function updateSimulation() {
+            // 1. 슬라이더 값 읽기
+            const indoorTarget = parseFloat(indoorTempSlider.value);
+            const outdoorActual = parseFloat(outdoorTempSlider.value);
+            const cop = parseFloat(efficiencySlider.value);
+            const insulationFactor = parseFloat(insulationSlider.value); // W/°C (열이 들어오는 속도)
+
+            // 2. 값 표시 업데이트
+            indoorTempValue.textContent = indoorTarget;
+            outdoorTempValue.textContent = outdoorActual;
+            efficiencyValue.textContent = cop;
+            insulationValue.textContent = insulationFactor;
+            
+            indoorTempDisplay.textContent = indoorTarget + "°C";
+            outdoorTempDisplay.textContent = outdoorActual + "°C";
+
+            // 3. 전력량 계산 (핵심 로직)
+            let powerConsumption = 0;
+            let coolingLoad = 0;
+            
+            // 냉방이 필요한 조건 (실외가 실내 목표보다 더울 때)
+            const tempDifference = outdoorActual - indoorTarget;
+
+            if (tempDifference > 0) {
+                // Q (냉방 부하, W) = (실외온도 - 실내목표온도) * 단열계수
+                coolingLoad = tempDifference * insulationFactor;
+                
+                // P (소비 전력, W) = Q (냉방 부하) / COP (효율)
+                powerConsumption = coolingLoad / cop;
+            }
+
+            // 4. 전력량 및 애니메이션 업데이트
+            powerOutput.textContent = Math.round(powerConsumption);
+
+            if (powerConsumption > 0) {
+                // 에어컨 작동 중 -> 애니메이션 'running'
+                flowHot.style.animationPlayState = 'running';
+                flowCool.style.animationPlayState = 'running';
+            } else {
+                // 에어컨 끔 -> 애니메이션 'paused'
+                flowHot.style.animationPlayState = 'paused';
+                flowCool.style.animationPlayState = 'paused';
+            }
+        }
+
+        // 모든 슬라이더에 이벤트 리스너 추가
+        [indoorTempSlider, outdoorTempSlider, efficiencySlider, insulationSlider].forEach(slider => {
+            slider.addEventListener('input', updateSimulation);
+        });
+
+        // 초기 로드 시 한 번 실행
+        updateSimulation();
+    </script>
+
+</body>
+</html>
